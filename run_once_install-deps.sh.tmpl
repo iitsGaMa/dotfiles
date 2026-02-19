@@ -1,0 +1,62 @@
+#!/bin/bash
+set -euo pipefail
+
+{{ if eq .chezmoi.os "linux" -}}
+echo "==> Installing dependencies for Linux..."
+
+# Install packages via apt
+sudo apt-get update -qq
+sudo apt-get install -y -qq zsh fzf ripgrep bat fd-find git curl
+
+# Fix naming: Debian/Ubuntu use 'batcat' and 'fdfind' instead of 'bat' and 'fd'
+if command -v batcat &>/dev/null && ! command -v bat &>/dev/null; then
+    sudo ln -sf "$(which batcat)" /usr/local/bin/bat
+fi
+if command -v fdfind &>/dev/null && ! command -v fd &>/dev/null; then
+    sudo ln -sf "$(which fdfind)" /usr/local/bin/fd
+fi
+
+# Install eza (not in default apt repos on older distros)
+if ! command -v eza &>/dev/null; then
+    sudo mkdir -p /etc/apt/keyrings
+    wget -qO- https://raw.githubusercontent.com/eza-community/eza/main/deb.asc | sudo gpg --dearmor -o /etc/apt/keyrings/gierens.gpg
+    echo "deb [signed-by=/etc/apt/keyrings/gierens.gpg] http://deb.gierens.de stable main" | sudo tee /etc/apt/sources.list.d/gierens.list
+    sudo apt-get update -qq
+    sudo apt-get install -y -qq eza
+fi
+
+# Install oh-my-zsh if not present
+if [ ! -d "$HOME/.oh-my-zsh" ]; then
+    echo "==> Installing oh-my-zsh..."
+    sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
+fi
+
+# Install zsh plugins
+ZSH_CUSTOM="${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}"
+if [ ! -d "$ZSH_CUSTOM/plugins/zsh-autosuggestions" ]; then
+    git clone https://github.com/zsh-users/zsh-autosuggestions "$ZSH_CUSTOM/plugins/zsh-autosuggestions"
+fi
+if [ ! -d "$ZSH_CUSTOM/plugins/zsh-syntax-highlighting" ]; then
+    git clone https://github.com/zsh-users/zsh-syntax-highlighting "$ZSH_CUSTOM/plugins/zsh-syntax-highlighting"
+fi
+if [ ! -d "$ZSH_CUSTOM/plugins/zsh-completions" ]; then
+    git clone https://github.com/zsh-users/zsh-completions "$ZSH_CUSTOM/plugins/zsh-completions"
+fi
+
+# Install Powerlevel10k if not present
+if [ ! -d "$HOME/powerlevel10k" ]; then
+    echo "==> Installing Powerlevel10k..."
+    git clone --depth=1 https://github.com/romkatv/powerlevel10k.git "$HOME/powerlevel10k"
+fi
+
+# Change default shell to zsh if not already
+if [ "$SHELL" != "$(which zsh)" ]; then
+    echo "==> Changing default shell to zsh..."
+    sudo chsh -s "$(which zsh)" "$(whoami)" || echo "Could not change shell automatically. Run: chsh -s $(which zsh)"
+fi
+
+echo "==> Done! Restart your shell or run: exec zsh"
+
+{{ else if eq .chezmoi.os "darwin" -}}
+echo "==> macOS detected, skipping dependency install (managed via Homebrew)."
+{{ end -}}
